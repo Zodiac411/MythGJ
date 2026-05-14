@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class EnemySpawner : MonoBehaviour
@@ -7,6 +8,8 @@ public class EnemySpawner : MonoBehaviour
     private Camera cam;
     private float camHeight;
     private float camWidth;
+    [SerializeField] private List<EnemyWaveProfile> waveProfiles = new List<EnemyWaveProfile>();
+    private EnemyWaveStrategyResolver waveStrategyResolver;
 
     public GameObject verticalEnemyPrefab;
     public GameObject horizontalEnemyPrefab;
@@ -20,7 +23,7 @@ public class EnemySpawner : MonoBehaviour
     #endregion
 
     #region Enums
-    enum SpawnSide { Top, Left, Right }
+    public enum SpawnSide { Top, Left, Right }
     #endregion
 
     #region Unity Methods
@@ -29,6 +32,8 @@ public class EnemySpawner : MonoBehaviour
         cam = Camera.main;
         camHeight = 2f * cam.orthographicSize;
         camWidth = camHeight * cam.aspect;
+        EnsureDefaultWaveProfiles();
+        waveStrategyResolver = new EnemyWaveStrategyResolver(waveProfiles);
 
         StartCoroutine(SpawnWaves());
     }
@@ -39,6 +44,21 @@ public class EnemySpawner : MonoBehaviour
     }
     #endregion
 
+    private void EnsureDefaultWaveProfiles()
+    {
+        if (waveProfiles != null && waveProfiles.Count > 0)
+        {
+            return;
+        }
+
+        waveProfiles = new List<EnemyWaveProfile>
+        {
+            new EnemyWaveProfile { maxWaveInclusive = 2, pattern = EnemyWavePattern.Early },
+            new EnemyWaveProfile { maxWaveInclusive = 7, pattern = EnemyWavePattern.Mid },
+            new EnemyWaveProfile { maxWaveInclusive = int.MaxValue, pattern = EnemyWavePattern.Late }
+        };
+    }
+
     #region Spawn Logic
     IEnumerator SpawnWaves()
     {
@@ -47,16 +67,7 @@ public class EnemySpawner : MonoBehaviour
             // Update logic to alternate enemy spawn types based on the wave count
             for (int i = 0; i < enemiesPerWave; i++)
             {
-                // After the first two waves, start including horizontal enemies
-                if (waveCount > 2)
-                {
-                    SpawnRandomEnemyType();
-                }
-                else
-                {
-                    // Initially, only spawn vertical enemies from the top
-                    SpawnEnemy(SpawnSide.Top, verticalEnemyPrefab);
-                }
+                SpawnCurrentWaveEnemy();
                 yield return new WaitForSeconds(timeBetweenSpawns);
             }
             waveCount++;
@@ -64,90 +75,20 @@ public class EnemySpawner : MonoBehaviour
             yield return new WaitForSeconds(5f); // Wait time before next wave
         }
     }
-    void SpawnRandomEnemyType()
+    void SpawnCurrentWaveEnemy()
     {
-        if (waveCount <= 2)
-        {
-            // Spawn only vertical enemies from the top
-            SpawnEnemy(SpawnSide.Top, verticalEnemyPrefab);
-        }
-        else if (waveCount <= 7) // Adjusted to 7 to account for 2 initial + 5 horizontal waves
-        {
-            // Randomly choose to spawn vertical or horizontal enemies
-            if (Random.Range(0, 2) == 0) // 50% chance
-            {
-                SpawnEnemy(SpawnSide.Top, verticalEnemyPrefab);
-            }
-            else
-            {
-                // Choose side for horizontal enemies
-                SpawnSide side = Random.Range(0, 2) == 0 ? SpawnSide.Left : SpawnSide.Right;
-                SpawnEnemy(side, horizontalEnemyPrefab);
-            }
-        }
-        else
-        {
-            // Now include zigzag enemies in the random choice
-            int enemyType = Random.Range(0, 3); // Now 0 to 2 for three types
-            SpawnSide side;
-            GameObject enemyPrefab;
+        IEnemyWaveStrategy waveStrategy = waveStrategyResolver.Resolve(waveCount);
+        EnemySpawnRequest spawnRequest = waveStrategy.CreateSpawnRequest(
+            verticalEnemyPrefab,
+            horizontalEnemyPrefab,
+            zigzagEnemyPrefab);
 
-            switch (enemyType)
-            {
-                case 0: // Vertical
-                    side = SpawnSide.Top;
-                    enemyPrefab = verticalEnemyPrefab;
-                    break;
-                case 1: // Horizontal
-                    side = Random.Range(0, 2) == 0 ? SpawnSide.Left : SpawnSide.Right;
-                    enemyPrefab = horizontalEnemyPrefab;
-                    break;
-                default: // Zigzag
-                    // Zigzag enemies can spawn from any side
-                    side = (SpawnSide)Random.Range(0, 3); // Casting to SpawnSide
-                    enemyPrefab = zigzagEnemyPrefab;
-                    break;
-            }
-
-            SpawnEnemy(side, enemyPrefab);
-        }
+        SpawnEnemy(spawnRequest.side, spawnRequest.enemyPrefab);
     }
     void SpawnEnemy(SpawnSide side, GameObject enemyPrefab)
     {
         Vector2 spawnPosition = GetSpawnPosition(side);
         Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
-    }
-
-    GameObject GetEnemyPrefabForWave()
-    {
-        if (waveCount <= 3)
-        {
-            return verticalEnemyPrefab;
-        }
-        else if (waveCount <= 6)
-        {
-            return horizontalEnemyPrefab;
-        }
-        else
-        {
-            return zigzagEnemyPrefab;
-        }
-    }
-
-    SpawnSide GetSpawnSideForWave()
-    {
-        if (waveCount <= 2)
-        {
-            return SpawnSide.Top;
-        }
-        else if (waveCount % 2 == 0)
-        {
-            return SpawnSide.Left;
-        }
-        else
-        {
-            return SpawnSide.Right;
-        }
     }
 
     Vector2 GetSpawnPosition(SpawnSide side)

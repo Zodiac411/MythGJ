@@ -4,6 +4,7 @@ public class Passenger : MonoBehaviour
 {
     public Sprite[] sprites; // Assign this array in the inspector
     private SpriteRenderer spriteRenderer;
+    private PassengerSpawner ownerSpawner;
     private float fallOffSpeed = 1f;
     private float shrinkRate = 0.5f;
     private float fadeRate = 1f;
@@ -22,6 +23,34 @@ public class Passenger : MonoBehaviour
         {
             renderer.sprite = sprites[Random.Range(0, sprites.Length)];
         }
+    }
+
+    public void PrepareForSpawn(PassengerSpawner spawner, Vector3 position, bool flipX)
+    {
+        ownerSpawner = spawner;
+        gameObject.SetActive(true);
+        transform.position = position;
+        transform.localScale = Vector3.one;
+        transform.rotation = Quaternion.identity;
+        spriteRenderer.flipX = flipX;
+        spriteRenderer.color = Color.white;
+        isFallingOff = false;
+
+        Collider2D collider = GetComponent<Collider2D>();
+        if (collider != null)
+        {
+            collider.enabled = true;
+        }
+
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+
+        AssignRandomSprite();
     }
 
     private void Update()
@@ -49,7 +78,14 @@ public class Passenger : MonoBehaviour
             // Destroy when barely visible
             if (transform.localScale.x < 0.05f)
             {
-                Destroy(gameObject);
+                if (ownerSpawner != null)
+                {
+                    ownerSpawner.RecyclePassenger(this);
+                }
+                else
+                {
+                    Destroy(gameObject);
+                }
             }
         }
     }

@@ -14,46 +14,23 @@ public class EnemyMovement : MonoBehaviour
     private float zigzagFrequency = 2f;
     [SerializeField]
     private float zigzagMagnitude = 0.5f;
-    private PassengerSpawner spawner;
-    // For zigzag movement calculation
-    private Vector3 axis;
     private Vector3 direction;
+    private IMovementStrategy movementStrategy;
     #endregion
 
     #region Unity Methods
     void Start()
     {
         speed = Random.Range(minSpeed, maxSpeed);
-        spawner = GameObject.Find("Spawner").gameObject.GetComponent<PassengerSpawner>();
-        // Set initial direction based on spawn side for horizontal and zigzag enemies
-        switch (movementType)
-        {
-            case MovementType.Horizontal:
-                direction = transform.position.x < 0 ? Vector3.right : Vector3.left;
-                break;
-            case MovementType.Zigzag:
-                axis = transform.position.y > 0 ? Vector3.down : (transform.position.x > 0 ? Vector3.left : Vector3.right);
-                direction = axis == Vector3.down ? Vector3.down : (axis == Vector3.left ? Vector3.left : Vector3.right);
-                break;
-            default:
-                direction = Vector3.down;
-                break;
-        }
+        movementStrategy = CreateMovementStrategy();
+        movementStrategy.Initialize(this);
     }
 
     void Update()
     {
-        switch (movementType)
+        if (movementStrategy != null)
         {
-            case MovementType.Vertical:
-                MoveVertical();
-                break;
-            case MovementType.Horizontal:
-                MoveHorizontal();
-                break;
-            case MovementType.Zigzag:
-                MoveZigzag();
-                break;
+            movementStrategy.Move(this, Time.deltaTime);
         }
         if (IsOffScreen())
         {
@@ -61,39 +38,84 @@ public class EnemyMovement : MonoBehaviour
         }
     }
     #endregion
+
+    private IMovementStrategy CreateMovementStrategy()
+    {
+        switch (movementType)
+        {
+            case MovementType.Horizontal:
+                return new HorizontalMovementStrategy();
+            case MovementType.Zigzag:
+                return new ZigzagMovementStrategy();
+            default:
+                return new VerticalMovementStrategy();
+        }
+    }
+
+    private interface IMovementStrategy
+    {
+        void Initialize(EnemyMovement enemy);
+        void Move(EnemyMovement enemy, float deltaTime);
+    }
+
+    private sealed class VerticalMovementStrategy : IMovementStrategy
+    {
+        public void Initialize(EnemyMovement enemy)
+        {
+            enemy.direction = Vector3.down;
+        }
+
+        public void Move(EnemyMovement enemy, float deltaTime)
+        {
+            enemy.transform.Translate(Vector3.down * enemy.speed * deltaTime, Space.World);
+        }
+    }
+
+    private sealed class HorizontalMovementStrategy : IMovementStrategy
+    {
+        public void Initialize(EnemyMovement enemy)
+        {
+            enemy.direction = enemy.transform.position.x < 0 ? Vector3.right : Vector3.left;
+        }
+
+        public void Move(EnemyMovement enemy, float deltaTime)
+        {
+            enemy.transform.Translate(enemy.direction * enemy.speed * deltaTime, Space.World);
+        }
+    }
+
+    private sealed class ZigzagMovementStrategy : IMovementStrategy
+    {
+        public void Initialize(EnemyMovement enemy)
+        {
+            enemy.direction = enemy.transform.position.y > 0
+                ? Vector3.down
+                : (enemy.transform.position.x > 0 ? Vector3.left : Vector3.right);
+        }
+
+        public void Move(EnemyMovement enemy, float deltaTime)
+        {
+            enemy.transform.position += enemy.direction * enemy.speed * deltaTime;
+
+            if (enemy.direction == Vector3.down)
+            {
+                enemy.transform.position += Vector3.right * Mathf.Sin(Time.time * enemy.zigzagFrequency) * enemy.zigzagMagnitude;
+            }
+            else
+            {
+                enemy.transform.position += Vector3.down * Mathf.Sin(Time.time * enemy.zigzagFrequency) * enemy.zigzagMagnitude;
+            }
+        }
+    }
+
     private void OnCollisionEnter2D(Collision2D collision)
     {
         if (collision.gameObject.tag ==  "Player") {
-
-           
             collision.gameObject.GetComponent<PlayerController>().DealDamage(1);
             Destroy(gameObject);
         }
     }
     #region Movement Methods
-    void MoveVertical()
-    {
-        transform.Translate(Vector3.down * speed * Time.deltaTime, Space.World);
-    }
-
-    void MoveHorizontal()
-    {
-        transform.Translate(direction * speed * Time.deltaTime, Space.World);
-    }
-
-    void MoveZigzag()
-    {
-        transform.position += direction * speed * Time.deltaTime;
-        if (direction == Vector3.down)
-        {
-            transform.position += Vector3.right * Mathf.Sin(Time.time * zigzagFrequency) * zigzagMagnitude;
-        }
-        else
-        {
-            transform.position += Vector3.down * Mathf.Sin(Time.time * zigzagFrequency) * zigzagMagnitude;
-        }
-    }
-
     bool IsOffScreen()
     {
         Vector2 screenPosition = Camera.main.WorldToViewportPoint(transform.position);

@@ -1,5 +1,5 @@
 using Unity.VisualScripting;
-
+using System.Collections.Generic;
 using UnityEngine;
 
 public class PassengerSpawner : MonoBehaviour
@@ -12,6 +12,7 @@ public class PassengerSpawner : MonoBehaviour
     public int columns = 2;
     public float spacing = 1.0f; // Adjust the spacing to your preference
     private GameObject[,] passengers; // Use a 2D array to represent the grid
+    private readonly Queue<Passenger> passengerPool = new Queue<Passenger>();
 
     private void Start()
     {
@@ -23,6 +24,9 @@ public class PassengerSpawner : MonoBehaviour
             int health = playerController.Health;
             int rows = 5; // Assuming you still want to arrange them in 5 rows
             int columns = Mathf.CeilToInt((float)health / rows); // Calculate columns needed
+
+            this.rows = rows;
+            this.columns = columns;
 
             passengers = new GameObject[columns, rows]; // Initialize the array based on health
             SpawnPassengers(health, rows, columns);
@@ -49,19 +53,25 @@ public class PassengerSpawner : MonoBehaviour
                 // Apply the spawn location offset here
                 Vector3 position = new Vector3(col * spacing + xOffset, row * -spacing, 0) + spawnLocationOffset;
 
-                GameObject newPassenger = Instantiate(passengerPrefab, position, Quaternion.identity, transform);
-                passengers[col, row] = newPassenger; // Store the passenger in the array
-
-                // Flipping sprite based on column
-                SpriteRenderer spriteRenderer = newPassenger.GetComponent<SpriteRenderer>();
-                if (col == 0 && spriteRenderer != null)
-                {
-                    spriteRenderer.flipX = true;
-                }
+                Passenger newPassenger = GetPassengerFromPool();
+                newPassenger.transform.SetParent(transform, false);
+                newPassenger.PrepareForSpawn(this, position, col == 0);
+                passengers[col, row] = newPassenger.gameObject; // Store the passenger in the array
 
                 passengerCount++;
             }
         }
+    }
+
+    private Passenger GetPassengerFromPool()
+    {
+        if (passengerPool.Count > 0)
+        {
+            return passengerPool.Dequeue();
+        }
+
+        GameObject newPassenger = Instantiate(passengerPrefab);
+        return newPassenger.GetComponent<Passenger>();
     }
 
 
@@ -83,5 +93,16 @@ public class PassengerSpawner : MonoBehaviour
                 break; // Only remove one passenger per call
             }
         }
+    }
+
+    public void RecyclePassenger(Passenger passenger)
+    {
+        if (passenger == null)
+        {
+            return;
+        }
+
+        passenger.gameObject.SetActive(false);
+        passengerPool.Enqueue(passenger);
     }
 }

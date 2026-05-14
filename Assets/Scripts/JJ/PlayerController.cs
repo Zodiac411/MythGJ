@@ -58,11 +58,10 @@ public class PlayerController : MonoBehaviour
                 print("Gained HP: " + value);
             }
 
-            if (value <= 0) {
+            health = Mathf.Max(value, 0);
+
+            if (health <= 0) {
                 Death(); } 
-            else { 
-                health = value; 
-            }
         }
     }
 
@@ -72,7 +71,11 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         damageCD = tiltTimeDamageIntervals;
-        spawner = GameObject.Find("Spawner").gameObject.GetComponent<PassengerSpawner>();
+        GameObject spawnerObject = GameObject.Find("Spawner");
+        if (spawnerObject != null)
+        {
+            spawner = spawnerObject.GetComponent<PassengerSpawner>();
+        }
     }
 
     void TiltLeft(float dt)
@@ -122,7 +125,7 @@ public class PlayerController : MonoBehaviour
         Color targetColor = Color.Lerp(Color.white, Color.black, Normalize(TiltDirection, -1, 1, -1, 1));//(TiltDirection + 1f) / 2f
 
         // Smoothly transition the color of the left wing
-        rightWing.color = Color.Lerp(leftWing.color, targetColor, 1);
+        rightWing.color = Color.Lerp(rightWing.color, targetColor, 1);
 
     }
 
@@ -141,37 +144,47 @@ public class PlayerController : MonoBehaviour
 
         if (canMove)
         {
-
             TiltCorrection(dt);
-            LeftWingColorLerp();
-            RightWingColorLerp();
-
+            UpdateWingColours();
         }
         if (isAlive)
         {
-            if (TiltDirection >= 1 - whenDamageIsTaken || TiltDirection <= -1 + whenDamageIsTaken)
-            {
-                damageCD -= 1 * Time.deltaTime;
-                if (damageCD <= 0)
-                {
-                    damageCD = tiltTimeDamageIntervals;
-                    DealDamage(1);
-                }
-            }
-            else
-            {
-                damageCD = tiltTimeDamageIntervals;
-            }
-
+            HandleTiltDamage(dt);
         }
 
         //print(TiltDirection);
     }
 
+    void UpdateWingColours()
+    {
+        LeftWingColorLerp();
+        RightWingColorLerp();
+    }
+
+    void HandleTiltDamage(float dt)
+    {
+        if (TiltDirection >= 1 - whenDamageIsTaken || TiltDirection <= -1 + whenDamageIsTaken)
+        {
+            damageCD -= dt;
+            if (damageCD <= 0)
+            {
+                damageCD = tiltTimeDamageIntervals;
+                DealDamage(1);
+            }
+        }
+        else
+        {
+            damageCD = tiltTimeDamageIntervals;
+        }
+    }
+
     public void DealDamage(int damage)
     {
         Health -= damage;
-        spawner.MakePassengerFallOff();
+        if (spawner != null)
+        {
+            spawner.MakePassengerFallOff();
+        }
     }
     void Death()
     {
